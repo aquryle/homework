@@ -2,17 +2,26 @@ import tkinter as tk
 import threading
 import time
 import random
+from num2bin import num2bin
 
 # グローバル変数（Entryの値）
-HKD = AOMR = AKT = IWT = YMGT = MYG = ""
+HKD = AOMR = AKT = IWT = YMGT = MYG = 0
 
-# Entryウィジェットの変数
+# Entryウィジェット
 entry_HKD: tk.Entry
 entry_AOMR: tk.Entry
 entry_AKT: tk.Entry
 entry_IWT: tk.Entry
 entry_YMGT: tk.Entry
 entry_MYG: tk.Entry
+
+# チェックボックス変数
+check_HKD: tk.IntVar
+check_AOMR: tk.IntVar
+check_AKT: tk.IntVar
+check_IWT: tk.IntVar
+check_YMGT: tk.IntVar
+check_MYG: tk.IntVar
 
 running = False
 thread = None
@@ -25,18 +34,35 @@ def update_globals():
     AKT = entry_AKT.get()
     IWT = entry_IWT.get()
     YMGT = entry_YMGT.get()
-    MYG = entry_MYG.get()
+    MYG = num2bin.sf16_bin16(float(entry_MYG.get()))
+
+    # MYG: 入力値を符号付き16bitにスケーリングして16進数表示
+    # try:
+    #     myg_float = float(entry_MYG.get())
+    #     if myg_float < -6.5536:     myg_float = -6.5536
+    #     elif myg_float > 6.5534:    myg_float = 6.5534
+    #     MYG = int(round(myg_float * 5000))
+    # except ValueError:
+    #     MYG = 0
 
 def print_loop():
     global running
     while running:
         update_globals()
-        # Entryの値をコンソール出力
-        print(HKD, AOMR, AKT, IWT, YMGT, MYG)
-        # 乱数を3つ生成してラベルに表示
+        # チェックされているラベルだけ出力
+        output = []
+        if check_HKD.get(): output.append(HKD)
+        if check_AOMR.get(): output.append(AOMR)
+        if check_AKT.get(): output.append(AKT)
+        if check_IWT.get(): output.append(IWT)
+        if check_YMGT.get(): output.append(YMGT)
+        if check_MYG.get(): output.append(hex(MYG & 0xFFFF))  # 16進数表示
+        print(" ".join(output))
+
+        # 乱数ラベル3つ
         for lbl in random_labels:
-            value = random.randint(1, 100)
-            lbl['value_label'].config(text=str(value))
+            lbl['value_label'].config(text=str(random.randint(1,100)))
+
         time.sleep(1)
 
 def toggle():
@@ -54,50 +80,32 @@ def toggle():
 root = tk.Tk()
 root.title("数字入力ウィンドウ")
 
-# Entry作成（6個）
-entries_info = [
-    ("HKD", 0),
-    ("AOMR", 1),
-    ("AKT", 2),
-    ("IWT", 3),
-    ("YMGT", 4),
-    ("MYG", 5)
-]
-
-for name, row in entries_info:
+# Entryとチェックボックス作成
+names = ['HKD', 'AOMR', 'AKT', 'IWT', 'YMGT', 'MYG']
+for i, name in enumerate(names):
     lbl = tk.Label(root, text=name + ":")
-    lbl.grid(row=row, column=0, padx=5, pady=5, sticky="e")
+    lbl.grid(row=i, column=0, padx=5, pady=5, sticky="e")
 
     entry = tk.Entry(root, width=10)
-    entry.grid(row=row, column=1, padx=5, pady=5)
+    entry.grid(row=i, column=1, padx=5, pady=5)
+    globals()[f"entry_{name}"] = entry
 
-    # 変数に直接代入
-    if name == "HKD":
-        entry_HKD = entry
-    elif name == "AOMR":
-        entry_AOMR = entry
-    elif name == "AKT":
-        entry_AKT = entry
-    elif name == "IWT":
-        entry_IWT = entry
-    elif name == "YMGT":
-        entry_YMGT = entry
-    elif name == "MYG":
-        entry_MYG = entry
+    var = tk.IntVar(value=1)
+    check = tk.Checkbutton(root, variable=var, fg="black", selectcolor="white", state="normal")
+    check.grid(row=i, column=2, padx=5, pady=5)
+    globals()[f"check_{name}"] = var
 
 # 乱数表示用ラベル（3つ）
 random_labels = []
-for i, label_name in enumerate(['R1', 'R2', 'R3']):
+for i, label_name in enumerate(['R1','R2','R3']):
     lbl_name = tk.Label(root, text=label_name + ":")
-    lbl_name.grid(row=i, column=2, padx=5, pady=5, sticky="e")
-
+    lbl_name.grid(row=i, column=3, padx=5, pady=5, sticky="e")
     lbl_value = tk.Label(root, text="0", width=5, fg="blue")
-    lbl_value.grid(row=i, column=3, padx=5, pady=5)
-
+    lbl_value.grid(row=i, column=4, padx=5, pady=5)
     random_labels.append({'name_label': lbl_name, 'value_label': lbl_value})
 
 # 開始/停止ボタン
 start_button = tk.Button(root, text="開始", command=toggle)
-start_button.grid(row=6, column=0, columnspan=4, pady=10)
+start_button.grid(row=6, column=0, columnspan=5, pady=10)
 
 root.mainloop()
