@@ -109,3 +109,55 @@ start_button = tk.Button(root, text="開始", command=toggle)
 start_button.grid(row=6, column=0, columnspan=5, pady=10)
 
 root.mainloop()
+
+
+
+import tkinter as tk
+
+root = tk.Tk()
+root.title("10x2 Data Input")
+
+# 上部にチェックボックスを2つ追加
+check_var1 = tk.BooleanVar()
+check_var2 = tk.BooleanVar()
+
+check1 = tk.Checkbutton(root, text="Option 1", variable=check_var1)
+check2 = tk.Checkbutton(root, text="Option 2", variable=check_var2)
+
+check1.grid(row=0, column=0, sticky="w", pady=5)
+check2.grid(row=0, column=1, sticky="w", pady=5)
+
+# 任意の名前リスト
+names = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]
+
+# Entryを配置（1行目をチェックボックスに使ったので +1 する）
+for i, name in enumerate(names, start=1):
+    # 1列目
+    label1 = tk.Label(root, text=f"DATA {name}1")
+    label1.grid(row=i, column=0, padx=5, pady=2, sticky="e")
+
+    globals()[f"data_{name}1"] = tk.StringVar()
+    entry1 = tk.Entry(root, textvariable=globals()[f"data_{name}1"], width=10)
+    entry1.grid(row=i, column=1, padx=5, pady=2)
+
+    # 2列目
+    label2 = tk.Label(root, text=f"DATA {name}2")
+    label2.grid(row=i, column=2, padx=5, pady=2, sticky="e")
+
+    globals()[f"data_{name}2"] = tk.StringVar()
+    entry2 = tk.Entry(root, textvariable=globals()[f"data_{name}2"], width=10)
+    entry2.grid(row=i, column=3, padx=5, pady=2)
+
+# 確認ボタン
+def show_values():
+    print("Check1:", check_var1.get())
+    print("Check2:", check_var2.get())
+    for name in names:
+        print(f"data_{name}1 =", globals()[f"data_{name}1"].get())
+        print(f"data_{name}2 =", globals()[f"data_{name}2"].get())
+
+button = tk.Button(root, text="Show Values", command=show_values)
+button.grid(row=len(names) + 1, column=0, columnspan=4, pady=10)
+
+root.mainloop()
+
