@@ -1,0 +1,13 @@
+# ID, xFlag, DLC, D0, D1, D2, D3, ..., D7, interval
+[ch1]
+000007FF,   0, 8,   01 23 45 67 89 AB CD EF, 10
+000007FE, 0, 8, 	00 00 00 00 00 00 00 00, 10
+
+1FFFFFFF, 1, 8, AA AA AA AA AA AA AA AA, 10
+185dfee1, 1, 8, ff ff ff ff ff ff ff ff, 10
+[ch2]
+000007FF, 0, 8, 01 23 45 67 89 AB CD EF, 10
+000007FF, 0, 8, 00 00 00 00 00 00 00 00, 10
+000007FF, 0, 8, AA AA AA AA AA AA AA AA, 10
+000007FF, 0, 8, ff ff ff ff ff ff ff ff, 10
+
