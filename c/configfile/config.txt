@@ -1,5 +1,7 @@
 # ID, xFlag, DLC, D0, D1, D2, D3, ..., D7, interval
 [ch1]
+BaudRate = 500000
+SamplePoint = 80
 000007FF,   0, 8,   01 23 45 67 89 AB CD EF, 10
 000007FE, 0, 8, 	00 00 00 00 00 00 00 00, 10
 

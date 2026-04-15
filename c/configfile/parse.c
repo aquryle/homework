@@ -15,6 +15,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define MAX_CHANNELS 2
 #define MAX_SETTINGS_PER_CH 25
@@ -28,13 +29,15 @@ typedef struct {
 	uint32_t interval;	// transmit interval(ms)
 
 	uint64_t nextTick;
-} user_config_t;
+} CanSetting_t;
 
 // CANチャネル構造体
 typedef struct {
 	int channelNum;
 	int settingCount;
-	user_config_t settings[MAX_SETTINGS_PER_CH];
+	uint32_t baudRate;
+	uint8_t samplePoint;
+	CanSetting_t settings[MAX_SETTINGS_PER_CH];
 } ChannelConfig_t;
 
 
@@ -61,119 +64,142 @@ static void skip_comma(const char **p)
 	}
 }
 
-/// @brief 配列から設定値にパースする
-/// @param buffer 配列
 void parseConfigFromMemory(const char *buffer) {
-	const char *p = buffer;				// 読み出し先
-	ChannelConfig_t *currentCh = NULL;	// 今読んでるチャネル
-	const char *lineStart;		// 行の開始位置
-	const char *lineEnd;		// 行の終了位置
-	const char *commentStart;	// コメントの開始位置
-	const char *validEnd;		//
-	const char *cursor;			// 今の読み出しポイント
-	int chNum;		// チャネル番号
-	user_config_t *setting;		// 設定構造体
-	char *next;		//
+	const char *p = buffer;
+	ChannelConfig_t *currentCh = NULL;
+	int lineCount = 0; // エラー表示用に位置を記録
+	CanSetting_t *set;
+	char *next;
 	int i;
+	const char *lineStart;
+	const char *commentStart;
+	const char *lineEnd = p;
+	const char *validEnd;
+	const char *cursor;
+	int chNum;
+	const char *equalPos;
+	char errorBuf[32];
+	size_t len;
 
-	// ヌル文字まで読み出しを続ける
+
 	while (*p != '\0') {
-		// 行初期化
+		lineCount++;
 		lineStart = p;
-		lineEnd = p;
 		commentStart = NULL;
 
-		// コメント処理
 		while (*p != '\n' && *p != '\0') {
-			if (*p == '#' && commentStart == NULL) {
-				commentStart = p;
-			}
+			if (*p == '#' && commentStart == NULL) commentStart = p;
 			p++;
 		}
 		lineEnd = p;
-		// lineEndの直前が \r なら、有効なデータの終端を一つ前にずらす
-		if (lineEnd > lineStart && *(lineEnd - 1) == '\r') {
-			if (commentStart == NULL || commentStart == lineEnd) {
-				validEnd = lineEnd - 1;
-			}
-		}
 		if (*p == '\n') p++;
 
 		validEnd = (commentStart != NULL) ? commentStart : lineEnd;
 		cursor = lineStart;
 		skip_spaces(&cursor);
 
+		// 空行またはコメント行
 		if (cursor >= validEnd) continue;
 
+		// --- 1. セクションヘッダ [chX] ---
 		if (*cursor == '[') {
 			cursor++;
-			if (cursor[0] == 'c' && cursor[1] == 'h') {
+			if (strncmp(cursor, "ch", 2) == 0) {
 				cursor += 2;
-				chNum = strtol(cursor, NULL, 10);
-
-				if (g_channelCount < MAX_CHANNELS) {
-					currentCh = &g_channels[g_channelCount++];
-					currentCh->channelNum = chNum;
-					currentCh->settingCount = 0;
-				} else {
-					currentCh = NULL;
+				chNum = (int)strtol(cursor, (char**)&cursor, 10);
+				if (*cursor == ']') {
+					if (g_channelCount < MAX_CHANNELS) {
+						currentCh = &g_channels[g_channelCount++];
+						currentCh->channelNum = chNum;
+						currentCh->settingCount = 0;
+						currentCh->baudRate = 0;   // 初期化
+						currentCh->samplePoint = 0;
+					}
+					continue;
 				}
 			}
+			printf("Error: Line %d - Invalid section format\n", lineCount);
 			continue;
 		}
 
-		if (currentCh == NULL || currentCh->settingCount >= MAX_SETTINGS_PER_CH) {
-			continue;
-		}
+		if (currentCh == NULL) continue;
 
-		setting = &currentCh->settings[currentCh->settingCount];
+		// --- 2. 厳密なキーワード比較 (BaudRate / SamplePoint) ---
 
-
-		setting->id = (uint32_t)strtoul(cursor, &next, 16);
-		cursor = next; skip_comma(&cursor);
-
-		setting->xFlag = (uint8_t)strtoul(cursor, &next, 10);
-		cursor = next; skip_comma(&cursor);
-
-		setting->dlc = (uint8_t)strtoul(cursor, &next, 10);
-		cursor = next; skip_comma(&cursor);
-
-		for (i = 0; i < 8; i++) {
-			if (i < setting->dlc) {
-				setting->data[i] = (uint8_t)strtoul(cursor, &next, 16);
-				cursor = next;
-			} else {
-				setting->data[i] = 0;
+		// 行の中に '=' があるか確認（あれば「設定行」とみなしてチェック）
+		equalPos = strchr(cursor, '=');
+		if (equalPos != NULL && equalPos < validEnd) {
+			if (strncmp(cursor, "BaudRate", 8) == 0) {
+				cursor = equalPos + 1; // '=' の直後へ
+				currentCh->baudRate = (uint32_t)strtoul(cursor, NULL, 10);
 			}
+			else if (strncmp(cursor, "SamplePoint", 11) == 0) {
+				cursor = equalPos + 1;
+				currentCh->samplePoint = (uint8_t)strtoul(cursor, NULL, 10);
+			}
+			else {
+				// タイポまたは未知のキーワード
+				len = equalPos - cursor;
+				if (len > 31) len = 31;
+				strncpy(errorBuf, cursor, len);
+				errorBuf[len] = '\0';
+				printf("Error: Line %d - Unknown keyword '%s'\n", lineCount, errorBuf);
+			}
+			continue;
 		}
-		skip_comma(&cursor);
 
-		setting->interval = (uint32_t)strtoul(cursor, &next, 10);
+		// --- 3. データ行のパース (数字で始まる場合) ---
+		if ((*cursor >= '0' && *cursor <= '9') || (*cursor >= 'a' && *cursor <= 'f') || (*cursor >= 'A' && *cursor <= 'F')) {
+			if (currentCh->settingCount >= MAX_SETTINGS_PER_CH) {
+				printf("Error: Line %d - Too many settings in [ch%d]\n", lineCount, currentCh->channelNum);
+				continue;
+			}
 
-		currentCh->settingCount++;
+
+
+			set = &currentCh->settings[currentCh->settingCount];
+			set->id = (uint32_t)strtoul(cursor, &next, 16);
+			cursor = next; skip_comma(&cursor);
+			set->xFlag = (uint8_t)strtoul(cursor, &next, 10);
+			cursor = next; skip_comma(&cursor);
+			set->dlc = (uint8_t)strtoul(cursor, &next, 10);
+			cursor = next; skip_comma(&cursor);
+
+			for (i = 0; i < 8; i++) {
+				set->data[i] = (uint8_t)strtoul(cursor, &next, 16);
+				cursor = next;
+			}
+			skip_comma(&cursor);
+			set->interval = (uint32_t)strtoul(cursor, &next, 10);
+
+			currentCh->settingCount++;
+		}
 	}
 }
 
 void printChannelConfigs(void) {
+	printf("\n==============================================================\n");
+	printf(" Parsed CAN Configuration\n");
+	printf("==============================================================\n");
+
+	if (g_channelCount == 0) {
+		printf("No data found.\n");
+		return;
+	}
 
 	for (int i = 0; i < g_channelCount; i++) {
 		ChannelConfig_t *ch = &g_channels[i];
-		printf("[ch%d] (Total Settings: %d)\n", ch->channelNum, ch->settingCount);
+		printf("[ch%d] BaudRate: %u bps | SamplePoint: %d%%\n",
+			ch->channelNum, ch->baudRate, ch->samplePoint);
+		printf("--------------------------------------------------------------\n");
 
 		for (int j = 0; j < ch->settingCount; j++) {
-			user_config_t *set = &ch->settings[j];
-
-			// IDは8桁のHex、各種フラグ、ペイロードデータを整形して表示
-			printf("  - ID: %08X | xFlag: %d | DLC: %d | Data: ",
-				set->id, set->xFlag, set->dlc);
-
-			for (int k = 0; k < 8; k++) {
-				printf("%02X ", set->data[k]);
-			}
-
-			printf("| Interval: %d ms\n", set->interval);
+			CanSetting_t *set = &ch->settings[j];
+			printf("  ID:%08X  x:%d  DLC:%d  Data:", set->id, set->xFlag, set->dlc);
+			for (int k = 0; k < 8; k++) printf(" %02X", set->data[k]);
+			printf("  Int:%dms\n", set->interval);
 		}
-		printf("--------------------------------------------------------------\n");
+		printf("\n");
 	}
 }
 
